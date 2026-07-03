@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Study - Flight Deck Dashboard</title>
+<style>
+:root {
+  --bg-space: #050a10;
+  --bg-deck: #0d1520;
+  --bg-panel: #142132;
+  --bg-input: #1b2b40;
+  --border-glow: #223854;
+  --txt-hud: #f8fafc;
+  --txt-dim: #94a3b8;
+  --glass-cyan: #0ea5e9;
+  --glass-green: #10b981;
+  --glass-amber: #f59e0b;
+  --glass-red: #ef4444;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+body { background: var(--bg-space); color: var(--txt-hud); overflow-x: hidden; line-height: 1.4; padding-bottom: 60px; }
+
+/* LAYOUT STRUCTURE */
+header { background: var(--bg-deck); border-bottom: 1px solid var(--border-glow); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+.nav-tabs { display: flex; gap: 8px; background: var(--bg-space); padding: 4px; border-radius: 8px; border: 1px solid var(--border-glow); }
+.nav-btn { background: transparent; border: none; color: var(--txt-dim); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s; }
+.nav-btn.active, .nav-btn:hover { background: var(--bg-panel); color: var(--glass-cyan); }
+
+.app-container { max-width: 1400px; margin: 30px auto; padding: 0 20px; display: grid; grid-template-columns: 1fr; gap: 30px; }
+.grid-main { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+@media(max-width: 1024px) { .grid-main { grid-template-columns: 1fr; } }
+
+.view-panel { display: none; }
+.view-panel.active { display: block; }
+
+/* COCKPIT UI COMPONENTS */
+.panel { background: var(--bg-deck); border: 1px solid var(--border-glow); border-radius: 12px; padding: 24px; position: relative; margin-bottom: 24px; }
+.panel-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--txt-dim); tracking: 0.1em; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glow); padding-bottom: 8px;}
+
+/* STATS INSTRUMENTS */
+.hud-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.hud-card { background: var(--bg-panel); border: 1px solid var(--border-glow); padding: 16px; border-radius: 8px; position: relative; overflow: hidden; }
+.hud-label { font-size: 0.75rem; color: var(--txt-dim); text-transform: uppercase; }
+.hud-value { font-size: 1.6rem; font-weight: 700; color: #fff; margin-top: 4px; font-family: monospace, sans-serif; }
+
+/* PROGRESS ENGINE */
+.prog-container { margin: 16px 0; }
+.prog-text { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; }
+.prog-bar-bg { background: var(--bg-space); height: 12px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-glow); }
+.prog-bar-fill { height: 100%; background: var(--glass-cyan); width: 0%; transition: width 0.5s ease; box-shadow: 0 0 10px var(--glass-cyan); }
+
+/* CONTROLS */
+.btn-primary { width: 100%; background: var(--glass-cyan); color: #03141e; font-weight: 700; text-transform: uppercase; padding: 16px; border: none; border-radius: 8px; cursor: pointer; letter-spacing: 0.05em; font-size: 1rem; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-primary:hover { background: #38bdf8; transform: translateY(-1px); box-shadow: 0 0 15px rgba(14,165,233,0.4); }
+.btn-action { background: var(--bg-panel); color: #fff; border: 1px solid var(--border-glow); padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+.btn-action:hover { border-color: var(--glass-cyan); color: var(--glass-cyan); }
+
+/* MISSIONS LIST */
+.mission-card { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--txt-dim); }
+.mission-card.active-mission { border-left-color: var(--glass-cyan); }
+.mission-card.completed { border-left-color: var(--glass-green); opacity: 0.7; }
+.mission-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--txt-dim); margin-bottom: 6px; }
+.mission-obj-list { list-style: none; margin: 10px 0; font-size: 0.9rem; padding-left: 4px; }
+.mission-obj-list li { margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+
+/* FORMS */
+.input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+input, select, textarea { width: 100%; background: var(--bg-input); border: 1px solid var(--border-glow); padding: 10px 14px; border-radius: 6px; color: #fff; font-size: 0.9rem; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--glass-cyan); }
+
+/* SYSTEM ACTIVE HUD (FLIGHT SCREEN) */
+#flight-deck-active { display: none; fixed: top 0 left 0; width: 100vw; height: 100vh; background: var(--bg-space); z-index: 9999; padding: 40px; justify-content: center; align-items: center; }
+.flight-hud-box { max-width: 650px; width: 100%; text-align: center; }
+.flight-timer { font-size: 6.5rem; font-weight: 800; font-family: monospace; color: #fff; text-shadow: 0 0 30px rgba(14,165,233,0.4); margin: 20px 0; letter-spacing: -2px; }
+.flight-atc { background: rgba(0,0,0,0.4); border: 1px solid var(--border-glow); padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; color: var(--glass-green); margin-bottom: 30px; }
+
+/* WEATHER WIDGET */
+.weather-selector { display: flex; gap: 8px; margin-bottom: 16px; }
+.weather-btn { flex: 1; padding: 10px; background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 6px; color: var(--txt-dim); cursor: pointer; text-align: center; font-size: 0.8rem; }
+.weather-btn.active { background: var(--bg-input); border-color: var(--glass-amber); color: #fff; box-shadow: 0 0 10px rgba(245,158,11,0.2); }
+
+/* ATMOSPHERE MODULE */
+.audio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.audio-btn { background: var(--bg-panel); border: 1px solid var(--border-glow); padding: 10px; border-radius: 6px; color: var(--txt-hud); font-size: 0.8rem; cursor: pointer; text-align: left; display: flex; justify-content: space-between; }
+.audio-btn.playing { border-color: var(--glass-green); color: var(--glass-green); }
+
+/* AIRPORTS GRAPHIC */
+.airport-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-panel); border: 1px solid var(--border-glow); margin-bottom: 8px; border-radius: 6px; }
+
+/* LOGS CONTAINER */
+.log-entry { padding: 12px; background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 6px; margin-bottom: 8px; font-size: 0.85rem; }
+
+/* CAREER TIMELINE */
+.rank-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: #fff; }
+.rank-cadet { background: #10b981; }
+.rank-student { background: #3b82f6; }
+.rank-private { background: #eab308; }
+.rank-commercial { background: #f97316; }
+.rank-officer { background: #ef4444; }
+.rank-captain { background: #7c3aed; }
+.rank-airman { background: #64748b; }
+
+/* ACHIEVEMENTS GRID */
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.ach-card { background: var(--bg-panel); border: 1px solid var(--border-glow); padding: 12px; border-radius: 6px; text-align: center; opacity: 0.4; transition: opacity 0.3s; }
+.ach-card.unlocked { opacity: 1; border-color: var(--glass-amber); box-shadow: 0 0 8px rgba(234,179,8,0.2); }
+.ach-icon { font-size: 1.5rem; margin-bottom: 4px; }
+.ach-title { font-size: 0.75rem; font-weight: 600; }
+
+/* AUTOPILOT / EMERGENCY MODES */
+body.autopilot-active #flight-deck-active { background: #020508; }
+body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h2 id="greet-banner">Good Evening, Captain.</h2>
+    <div style="font-size: 0.8rem; color: var(--txt-dim);">Every flight cycle logs critical metrics.</div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-btn active" onclick="switchTab('dash')">DASHBOARD</button>
+    <button class="nav-btn" onclick="switchTab('planner')">MISSIONS</button>
+    <button class="nav-btn" onclick="switchTab('airports')">AIRPORTS</button>
+    <button class="nav-btn" onclick="switchTab('logs-view')">LOGS & ANALYTICS</button>
+  </div>
+</header>
+
+<div class="app-container">
+  
+  <div id="view-dash" class="view-panel active">
+    <div class="grid-main">
+      <div>
+        <div class="panel">
+          <div class="panel-title">SYSTEM PRE-FLIGHT COMMAND HUB</div>
+          
+          <div class="hud-grid">
+            <div class="hud-card">
+              <span class="hud-label">Current Altitude</span>
+              <div class="hud-value" id="hud-rank" style="font-size:1.2rem; margin-top:8px;">Cadet</div>
+            </div>
+            <div class="hud-card">
+              <span class="hud-label">Total Flight Hours</span>
+              <div class="hud-value" id="hud-hours">0h 00m</div>
+            </div>
+            <div class="hud-card">
+              <span class="hud-label">Current Streak</span>
+              <div class="hud-value" id="hud-streak">🔥 0 Days</div>
+            </div>
+          </div>
+
+          <div class="prog-container">
+            <div class="prog-text">
+              <span style="color: var(--txt-dim);" id="rank-progress-label">Next Rank Milestone Progress</span>
+              <span id="rank-progress-pct" style="font-weight: 700; color: var(--glass-cyan);">0%</span>
+            </div>
+            <div class="prog-bar-bg"><div class="prog-bar-fill" id="rank-progress-bar"></div></div>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <label style="display:block; font-size:0.75rem; text-transform:uppercase; color:var(--txt-dim); margin-bottom:6px;">Select Active Target Mission Vector</label>
+            <select id="active-mission-selector" style="margin-bottom: 20px;" onchange="syncMissionSelection()">
+              <option value="">No Active Mission Planned</option>
+            </select>
+            <button class="btn-primary" onclick="engageFlightDeck()">✈️ Begin Flight Session</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">PILOT CAREER EXPEDITION RANKS</div>
+          <div style="display:flex; flex-wrap: wrap; gap:8px;">
+            <span class="rank-badge rank-cadet">🟢 Cadet (0-99 XP)</span>
+            <span class="rank-badge rank-student">🔵 Student Pilot (100-249 XP)</span>
+            <span class="rank-badge rank-private">🟡 Private Pilot (250-499 XP)</span>
+            <span class="rank-badge rank-commercial">🟠 Commercial Pilot (500-999 XP)</span>
+            <span class="rank-badge rank-officer">🔴 First Officer (1000-1999 XP)</span>
+            <span class="rank-badge rank-captain">⚫ Captain (2000-3499 XP)</span>
+            <span class="rank-badge rank-airman">⚪ Check Airman (3500+ XP)</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel">
+          <div class="panel-title">🌤️ DISPATCH WEATHER SYSTEMS</div>
+          <p style="font-size:0.8rem; color:var(--txt-dim); margin-bottom:12px;">Log baseline energy before initialization:</p>
+          <div class="weather-selector">
+            <button class="weather-btn" onclick="setWeather('Motivated')" id="w-Motivated">☀ Motivated</button>
+            <button class="weather-btn" onclick="setWeather('Normal')" id="w-Normal">🌤 Normal</button>
+          </div>
+          <div class="weather-selector">
+            <button class="weather-btn" onclick="setWeather('Low Energy')" id="w-Low">🌧 Low Energy</button>
+            <button class="weather-btn" onclick="setWeather('Burned Out')" id="w-Burned">⛈ Burned Out</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🎵 DECK SOUND ENVIRONMENTS</div>
+          <div class="audio-grid">
+            <button class="audio-btn" onclick="toggleNoise('brown')">Brown Noise <span id="s-brown">▢</span></button>
+            <button class="audio-btn" onclick="toggleNoise('rain')">Rain Static <span id="s-rain">▢</span></button>
+            <button class="audio-btn" onclick="toggleNoise('airport')">Terminal Amb <span id="s-airport">▢</span></button>
+            <button class="audio-btn" onclick="toggleNoise('cockpit')">Cockpit Hum <span id="s-cockpit">▢</span></button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🤝 CO-PILOT TRANSPONDER</div>
+          <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius:6px; font-size:0.85rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span>Remote Sync Link</span>
+              <span style="color:var(--glass-green); font-size:0.75rem;">🟢 Ready</span>
+            </div>
+            <p style="color:var(--txt-dim); font-size:0.75rem; margin-bottom:8px;">Simulate integrated side-by-side flight timers.</p>
+            <input placeholder="Enter Co-Pilot Callsign Link..." style="padding:6px; font-size:0.75rem;">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-planner" class="view-panel">
+    <div class="grid-main">
+      <div class="panel">
+        <div class="panel-title">FLIGHT MANIFEST / LOGGED MISSIONS</div>
+        <div id="missions-container-list"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">FILE NEW FLIGHT MISSION</div>
+        <div class="input-row">
+          <div>
+            <label style="font-size:0.75rem; color:var(--txt-dim);">Subject Routing</label>
+            <select id="form-m-subject">
+              <option value="Math">🛫 Mumbai [Math]</option>
+              <option value="Physics">🛫 Delhi [Physics]</option>
+              <option value="Chemistry">🛫 Dubai [Chemistry]</option>
+              <option value="English">🛫 Singapore [English]</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem; color:var(--txt-dim);">Duration Allotment</label>
+            <select id="form-m-time">
+              <option value="25">25 Minutes</option>
+              <option value="30" selected>30 Minutes</option>
+              <option value="45">45 Minutes</option>
+              <option value="60">60 Minutes</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:0.75rem; color:var(--txt-dim);">Core Objective Target</label>
+          <input id="form-m-obj" placeholder="e.g. Complete Truth Tables Exercise A">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.75rem; color:var(--txt-dim);">Difficulty Parameter</label>
+          <select id="form-m-diff">
+            <option value="⭐">⭐ Easy Variant</option>
+            <option value="⭐⭐">⭐⭐ Moderate Path</option>
+            <option value="⭐⭐⭐" selected>⭐⭐⭐ Critical Flight</option>
+          </select>
+        </div>
+        <button class="btn-action" style="width:100%;" onclick="createNewMission()">Authorize Mission Architecture</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-airports" class="view-panel">
+    <div class="panel">
+      <div class="panel-title">GLOBAL AIRPORT NAVIGATION SYSTEM MAPS</div>
+      <div id="airport-matrix-target"></div>
+    </div>
+  </div>
+
+  <div id="view-logs-view" class="view-panel">
+    <div class="grid-main">
+      <div class="panel">
+        <div class="panel-title">HISTORICAL ARCHIVAL FLIGHT LOGS</div>
+        <div id="flight-logs-target-list"></div>
+      </div>
+      <div>
+        <div class="panel">
+          <div class="panel-title">FLIGHT RECONNAISSANCE STATS</div>
+          <div id="analytics-stats-panel" style="font-size:0.9rem;">
+            </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">🎖️ PILOT ACCOMPLISHMENT BADGES</div>
+          <div class="ach-grid" id="achievements-box-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="flight-deck-active">
+  <div class="flight-hud-box">
+    <h2 style="text-transform:uppercase; tracking:0.15em; font-size:1.1rem; color:var(--txt-dim);" id="active-flight-headline">CRITICAL FLIGHT SEGMENT ENGAGED</h2>
+    <div class="flight-timer" id="active-clock-digits">00:30:00</div>
+    
+    <div style="margin-bottom:20px;">
+      <h3 id="active-hud-sub" style="color:var(--glass-cyan); margin-bottom:4px;">Mathematics</h3>
+      <p id="active-hud-obj" style="color:#fff; font-size:1.1rem; font-weight:600;">Mathematical Logic Baseline</p>
+    </div>
+
+    <div class="flight-atc" id="atc-dispatch-feed">ATC: Cleared for immediate takeoff. Maintain visual flight paths.</div>
+
+    <div class="audio-grid" style="max-width: 400px; margin: 0 auto 24px auto;">
+      <button class="audio-btn" onclick="toggleNoise('brown')">Brown <span id="active-s-brown">▢</span></button>
+      <button class="audio-btn" onclick="toggleNoise('rain')">Rain <span id="active-s-rain">▢</span></button>
+      <button class="audio-btn" onclick="toggleNoise('airport')">Terminal <span id="active-s-airport">▢</span></button>
+      <button class="audio-btn" onclick="toggleNoise('cockpit')">Cockpit <span id="active-s-cockpit">▢</span></button>
+    </div>
+
+    <div class="flight-deck-links" style="display:flex; justify-content:center; gap:16px; margin-bottom:30px; font-size:0.85rem;">
+      <a href="https://discord.com" target="_blank" style="color:var(--txt-dim); text-decoration:none;">🔗 Discord Matrix Link</a>
+      <a href="https://spotify.com" target="_blank" style="color:var(--txt-dim); text-decoration:none;">🔗 Audio Shortcut</a>
+    </div>
+
+    <div style="display:flex; gap:12px; justify-content:center; max-width:440px; margin:0 auto;">
+      <button class="btn-action" style="flex:1; border-color:var(--glass-amber); color:var(--glass-amber);" onclick="triggerPauseResumeActiveFlight()" id="active-pause-btn">HOLD MOTION</button>
+      <button class="btn-action" style="flex:1; border-color:var(--glass-red); color:var(--glass-red);" onclick="abortActiveFlightCycle()">ABORT MISSION</button>
+      <button class="btn-action" style="flex:1; background:var(--glass-green); color:#000; font-weight:bold; border:none;" onclick="triggerEmergencyAutopilot()" id="autopilot-toggle-btn">AUTOPILOT</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// APPLICATION ENGINE CORE ARCHITECTURE
+let sysState = JSON.parse(localStorage.getItem('flightEngineState') || JSON.stringify({
+  xp: 0,
+  hours: 0, 
+  streak: 3,
+  currentWeather: 'Normal',
+  lastLoggedDate: '',
+  missions: [
+    { id: 'M-014', subject: 'Math', objective: 'Mathematical Logic Fundamentals', time: 30, difficulty: '⭐⭐⭐', status: 'In Progress' },
+    { id: 'M-015', subject: 'Physics', objective: 'Kinematics Formulas Reconstruction', time: 45, difficulty: '⭐⭐', status: 'In Progress' }
+  ],
+  logs: [
+    { flightNum: 101, date: 'July 2', duration: 30, subject: 'Math', mission: 'Mathematical Logic Core Basics', notes: 'Understood Truth Tables cleanly today.', weather: 'Normal' }
+  ]
+}));
+
+const rankMatrix = [
+  { name: 'Cadet', min: 0, bg: 'rank-cadet' },
+  { name: 'Student Pilot', min: 100, bg: 'rank-student' },
+  { name: 'Private Pilot', min: 250, bg: 'rank-private' },
+  { name: 'Commercial Pilot', min: 500, bg: 'rank-commercial' },
+  { name: 'First Officer', min: 1000, bg: 'rank-officer' },
+  { name: 'Captain', min: 2000, bg: 'rank-captain' },
+  { name: 'Check Airman', min: 3500, bg: 'rank-airman' }
+];
+
+const airportsConfig = {
+  Math: { name: 'Mumbai', code: 'BOM' },
+  Physics: { name: 'Delhi', code: 'DEL' },
+  Chemistry: { name: 'Dubai', code: 'DXB' },
+  English: { name: 'Singapore', code: 'SIN' }
+};
+
+const achievementsConfig = [
+  { id: 'f_flight', title: 'First Flight', icon: '🛫', desc: 'Log 1 flight session' },
+  { id: 'five_hr', title: '5 Hour Pilot', icon: '⏱️', desc: 'Reach 300 total logged minutes' },
+  { id: 'survivor', title: 'Math Survivor', icon: '🧮', desc: 'Complete 3 Math missions' },
+  { id: 'weather_proof', title: 'Rain Master', icon: '🌧️', desc: 'Complete a low-energy session' }
+];
+
+// TIMING MATRIX CORE
+let activeTimer = null;
+let secondsRemaining = 0;
+let isFlightRunning = false;
+let targetedMissionId = "";
+let audioNodes = {};
+let isAutopilotEngaged = false;
+
+function commitEngineStorage() {
+  localStorage.setItem('flightEngineState', JSON.stringify(sysState));
+}
+
+function switchTab(tabId) {
+  document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`view-${tabId}`).classList.add('active');
+  event.target.classList.add('active');
+  compileLiveViews();
+}
+
+function setWeather(status) {
+  sysState.currentWeather = status;
+  commitEngineStorage();
+  compileLiveViews();
+}
+
+function createNewMission() {
+  const sub = document.getElementById('form-m-subject').value;
+  const time = parseInt(document.getElementById('form-m-time').value);
+  const obj = document.getElementById('form-m-obj').value || 'General Tactical Review';
+  const diff = document.getElementById('form-m-diff').value;
+  const newId = `M-${Math.floor(100 + Math.random() * 900)}`;
+  
+  sysState.missions.push({ id: newId, subject: sub, objective: obj, time: time, difficulty: diff, status: 'In Progress' });
+  commitEngineStorage();
+  document.getElementById('form-m-obj').value = '';
+  switchTab('dash');
+}
+
+function calculateCurrentRankAndProgress() {
+  let xp = sysState.xp;
+  let currentRankIndex = 0;
+  for(let i=0; i<rankMatrix.length; i++) {
+    if(xp >= rankMatrix[i].min) currentRankIndex = i;
+  }
+  let currentRank = rankMatrix[currentRankIndex];
+  let nextRank = rankMatrix[currentRankIndex + 1] || null;
+  
+  let percent = 100;
+  if(nextRank) {
+    let range = nextRank.min - currentRank.min;
+    let earned = xp - currentRank.min;
+    percent = Math.min(100, Math.floor((earned / range) * 100));
+  }
+  return { currentRank, nextRank, percent };
+}
+
+function compileLiveViews() {
+  // Banner
+  const hr = new Date().getHours();
+  document.getElementById('greet-banner').textContent = hr < 12 ? "Good Morning, Captain." : hr < 18 ? "Good Afternoon, Captain." : "Good Evening, Captain.";
+
+  // HUD Framework
+  const rankMeta = calculateCurrentRankAndProgress();
+  document.getElementById('hud-rank').textContent = rankMeta.currentRank.name;
+  document.getElementById('hud-hours').textContent = `${Math.floor(sysState.hours / 60)}h ${sysState.hours % 60}m`;
+  document.getElementById('hud-streak').textContent = `🔥 ${sysState.streak} Days`;
+  
+  // Progress
+  document.getElementById('rank-progress-pct').textContent = `${rankMeta.percent}%`;
+  document.getElementById('rank-progress-bar').style.width = `${rankMeta.percent}%`;
+  document.getElementById('rank-progress-label').textContent = rankMeta.nextRank ? `Next Vector: ${rankMeta.nextRank.name}` : `Maximum Rank Achieved`;
+
+  // Select Dropdown Sync
+  const selector = document.getElementById('active-mission-selector');
+  let previousValue = selector.value;
+  selector.innerHTML = `<option value="">No Active Specific Mission [Manual Track]</option>`;
+  sysState.missions.forEach(m => {
+    if(m.status !== 'Completed') {
+      selector.innerHTML += `<option value="${m.id}">[${m.id}] ${m.subject} - ${m.objective} (${m.time}m)</option>`;
+    }
+  });
+  if(previousValue) selector.value = previousValue;
+
+  // Weather Highlight UI
+  document.querySelectorAll('.weather-btn').forEach(b => b.classList.remove('active'));
+  if(sysState.currentWeather === 'Motivated') document.getElementById('w-Motivated').classList.add('active');
+  if(sysState.currentWeather === 'Normal') document.getElementById('w-Normal').classList.add('active');
+  if(sysState.currentWeather === 'Low Energy') document.getElementById('w-Low').classList.add('active');
+  if(sysState.currentWeather === 'Burned Out') document.getElementById('w-Burned').classList.add('active');
+
+  // Build Mission List View
+  const mContainer = document.getElementById('missions-container-list');
+  mContainer.innerHTML = sysState.missions.length ? "" : `<p style="color:var(--txt-dim); font-size:0.9rem;">No active missions filed.</p>`;
+  sysState.missions.slice().reverse().forEach(m => {
+    mContainer.innerHTML += `
+      <div class="mission-card ${m.status === 'Completed' ? 'completed' : ''}">
+        <div class="mission-meta"><span>${m.id} // SUBJECT: ${m.subject}</span><span>${m.difficulty}</span></div>
+        <div style="font-weight:700; margin-bottom:6px;">${m.objective}</div>
+        <div class="mission-meta"><span>Allocated Velocity: ${m.time} mins</span><span>Status: <b style="color:var(--glass-amber);">${m.status}</b></span></div>
+      </div>`;
+  });
+
+  // Build Airport Matrix Maps
+  const airTarget = document.getElementById('airport-matrix-target');
+  airTarget.innerHTML = "";
+  Object.keys(airportsConfig).forEach(subKey => {
+    let air = airportsConfig[subKey];
+    let totalFlights = sysState.logs.filter(l => l.subject === subKey).length;
+    let completedMissions = sysState.missions.filter(m => m.subject === subKey && m.status === 'Completed').length;
+    let totalMissions = sysState.missions.filter(m => m.subject === subKey).length;
+    let pct = totalMissions === 0 ? 0 : Math.floor((completedMissions / totalMissions) * 100);
+    
+    airTarget.innerHTML += `
+      <div class="airport-row">
+        <div>
+          <span style="font-weight:700; color:var(--glass-cyan);">🛫 ${air.code} (${air.name})</span>
+          <div style="font-size:0.75rem; color:var(--txt-dim); margin-top:2px;">Subject Vector: ${subKey}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:bold; font-size:0.9rem;">${totalFlights} Flights Logged</div>
+          <div style="font-size:0.75rem; color:var(--glass-green);">${pct}% Completion Vector</div>
+        </div>
+      </div>`;
+  });
+
+  // Build Log & Analytics View
+  const logTarget = document.getElementById('flight-logs-target-list');
+  logTarget.innerHTML = sysState.logs.length ? "" : `<p style="color:var(--txt-dim);">Flight log database clear.</p>`;
+  sysState.logs.slice().reverse().forEach(l => {
+    logTarget.innerHTML += `
+      <div class="log-entry">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-weight:700;">
+          <span style="color:var(--glass-cyan);">✈ Flight #${l.flightNum} [${l.subject}]</span>
+          <span>${l.duration} min • ${l.date}</span>
+        </div>
+        <div style="color: #fff; margin-bottom:2px;">Mission Target: ${l.mission}</div>
+        <div style="color:var(--txt-dim); font-size:0.75rem;">Flight Conditions: Dispatch Weather ${l.weather || 'Normal'} // Context: ${l.notes || 'None'}</div>
+      </div>`;
+  });
+
+  // Analytics Panel Calc
+  const longest = sysState.logs.length ? Math.max(...sysState.logs.map(l => l.duration)) : 0;
+  const average = sysState.logs.length ? Math.floor(sysState.logs.reduce((acc, current) => acc + current.duration, 0) / sysState.logs.length) : 0;
+  document.getElementById('analytics-stats-panel').innerHTML = `
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>Longest Session Flight:</span><span style="font-weight:bold; color:var(--glass-amber);">${longest} mins</span></div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>Average Flight Duration:</span><span style="font-weight:bold; color:var(--glass-cyan);">${average} mins</span></div>
+    <div style="display:flex; justify-content:space-between;"><span>Total Cumulative Sessions:</span><span style="font-weight:bold; color:var(--glass-green);">${sysState.logs.length} Cycles</span></div>
+  `;
+
+  // Process Achievements Grid
+  const achTarget = document.getElementById('achievements-box-grid');
+  achTarget.innerHTML = "";
+  achievementsConfig.forEach(ach => {
+    let unlocked = false;
+    if(ach.id === 'f_flight' && sysState.logs.length >= 1) unlocked = true;
+    if(ach.id === 'five_hr' && sysState.hours >= 300) unlocked = true;
+    if(ach.id === 'survivor' && sysState.logs.filter(l => l.subject === 'Math').length >= 3) unlocked = true;
+    if(ach.id === 'weather_proof' && sysState.logs.some(l => l.weather === 'Low Energy' || l.weather === 'Burned Out')) unlocked = true;
+
+    achTarget.innerHTML += `
+      <div class="ach-card ${unlocked ? 'unlocked' : ''}">
+        <div class="ach-icon">${ach.icon}</div>
+        <div class="ach-title">${ach.title}</div>
+        <div style="font-size:0.6rem; color:var(--txt-dim); margin-top:4px;">${ach.desc}</div>
+      </div>`;
+  });
+}
+
+function syncMissionSelection() {
+  targetedMissionId = document.getElementById('active-mission-selector').value;
+}
+
+// SIMULATED AUDIO WEB SYNTHESIZER FOR ENGINE SOUNDSCAPES
+function toggleNoise(type) {
+  if (audioNodes[type]) {
+    audioNodes[type].stop();
+    delete audioNodes[type];
+    updateAudioButtonUI(type, false);
+    return;
+  }
+  
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const bufferSize = 2 * ctx.sampleRate;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    
+    let lastOut = 0.0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      if (type === 'brown') {
+        output[i] = (lastOut + (0.02 * white)) / 1.02;
+        lastOut = output[i];
+        output[i] *= 3.5; // Gain scaling
+      } else if (type === 'cockpit' || type === 'ambient') {
+        output[i] = (lastOut + (0.01 * white)) / 1.01;
+        lastOut = output[i];
+        output[i] *= 2.0;
+      } else {
+        output[i] = white * 0.15; // Rain/White
+      }
+    }
+    
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.loop = true;
+    
+    // Lowpass filtration for heavy aviation cockpit sound properties
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = type === 'cockpit' ? 180 : type === 'brown' ? 400 : 1500;
+    
+    whiteNoise.connect(filter);
+    filter.connect(ctx.destination);
+    whiteNoise.start();
+    
+    audioNodes[type] = whiteNoise;
+    updateAudioButtonUI(type, true);
+  } catch(e) {
+    console.error("Audio Context initialization vector block:", e);
+  }
+}
+
+function updateAudioButtonUI(type, isPlaying) {
+  const sym = isPlaying ? "🟢" : "▢";
+  const btnDash = document.getElementById(`s-${type}`);
+  const btnActive = document.getElementById(`active-s-${type}`);
+  if(btnDash) btnDash.textContent = sym;
+  if(btnActive) btnActive.textContent = sym;
+}
+
+// IN-FLIGHT DISPATCH TIMER LOOPS
+function engageFlightDeck() {
+  let matchedMission = sysState.missions.find(m => m.id === targetedMissionId);
+  
+  let subjectStr = matchedMission ? matchedMission.subject : "General Vector";
+  let objectiveStr = matchedMission ? matchedMission.objective : "Manual Target Operational Objective Run";
+  let durationMins = matchedMission ? matchedMission.time : 30;
+
+  document.getElementById('active-hud-sub').textContent = `Target Routing: [${subjectStr}]`;
+  document.getElementById('active-hud-obj').textContent = objectiveStr;
+  
+  secondsRemaining = durationMins * 60;
+  refreshClockDisplay();
+  
+  document.getElementById('flight-deck-active').style.display = 'flex';
+  document.getElementById('atc-dispatch-feed').textContent = "ATC: Cleared for flight routing departure climb profile. Maintain altitude.";
+  
+  isFlightRunning = true;
+  isAutopilotEngaged = false;
+  document.body.classList.remove('autopilot-active');
+  document.getElementById('autopilot-toggle-btn').textContent = "AUTOPILOT";
+  
+  activeTimer = setInterval(() => {
+    if(isFlightRunning) {
+      secondsRemaining--;
+      refreshClockDisplay();
+      if(secondsRemaining <= 0) {
+        completeFlightSessionRoute(durationMins, subjectStr, objectiveStr);
+      }
+    }
+  }, 1000);
+}
+
+function refreshClockDisplay() {
+  let h = Math.floor(secondsRemaining / 3600);
+  let m = Math.floor((secondsRemaining % 3600) / 60);
+  let s = secondsRemaining % 60;
+  document.getElementById('active-clock-digits').textContent = 
+    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function triggerPauseResumeActiveFlight() {
+  isFlightRunning = !isFlightRunning;
+  document.getElementById('active-pause-btn').textContent = isFlightRunning ? "HOLD MOTION" : "RESUME CLIMB";
+  document.getElementById('atc-dispatch-feed').textContent = isFlightRunning ? "ATC: Continuing flight climb layout standard." : "ATC: Holding patterns executed. Deviating focus parameters.";
+}
+
+function triggerEmergencyAutopilot() {
+  isAutopilotEngaged = !isAutopilotEngaged;
+  if(isAutopilotEngaged) {
+    document.body.classList.add('autopilot-active');
+    document.getElementById('autopilot-toggle-btn').textContent = "MANUAL DECK";
+    document.getElementById('atc-dispatch-feed').textContent = "ATC: Autopilot Engaged. Visual distractions shuttered.";
+    isFlightRunning = true;
+    document.getElementById('active-pause-btn').textContent = "HOLD MOTION";
+  } else {
+    document.body.classList.remove('autopilot-active');
+    document.getElementById('autopilot-toggle-btn').textContent = "AUTOPILOT";
+    document.getElementById('atc-dispatch-feed').textContent = "ATC: Tactical control returned to primary pilot instrumentation.";
+  }
+}
+
+function abortActiveFlightCycle() {
+  if(confirm("Confirm emergency landing protocol? Current operational segment stats will be cleared.")) {
+    clearInterval(activeTimer);
+    document.getElementById('flight-deck-active').style.display = 'none';
+    isFlightRunning = false;
+  }
+}
+
+function completeFlightSessionRoute(minutes, subject, objective) {
+  clearInterval(activeTimer);
+  document.getElementById('flight-deck-active').style.display = 'none';
+  isFlightRunning = false;
+
+  sysState.xp += minutes;
+  sysState.hours += minutes;
+  
+  // Flag active target complete if it matches a generated mission
+  if(targetedMissionId) {
+    let index = sysState.missions.findIndex(m => m.id === targetedMissionId);
+    if(index !== -1) sysState.missions[index].status = 'Completed';
+  }
+
+  // File to flight log matrix
+  const nextFlightNum = 100 + sysState.logs.length + 1;
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  
+  sysState.logs.push({
+    flightNum: nextFlightNum,
+    date: dateStr,
+    duration: minutes,
+    subject: subject,
+    mission: objective,
+    notes: 'Mission metrics reached optimal tolerances.',
+    weather: sysState.currentWeather
+  });
+
+  commitEngineStorage();
+  alert(`Mission Complete! Flight Log #${nextFlightNum} logged smoothly. Verified +${minutes} XP Added.`);
+  compileLiveViews();
+}
+
+// RUN APPLICATION CORE
+compileLiveViews();
+</script>
+
+</body>
+</html>
