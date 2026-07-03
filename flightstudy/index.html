@@ -56,12 +56,14 @@ header { background: var(--bg-deck); border-bottom: 1px solid var(--border-glow)
 .btn-primary:hover { background: #38bdf8; transform: translateY(-1px); box-shadow: 0 0 15px rgba(14,165,233,0.4); }
 .btn-action { background: var(--bg-panel); color: #fff; border: 1px solid var(--border-glow); padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
 .btn-action:hover { border-color: var(--glass-cyan); color: var(--glass-cyan); }
+.btn-delete { background: rgba(239, 68, 68, 0.1); color: var(--glass-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.2s; }
+.btn-delete:hover { background: var(--glass-red); color: #fff; border-color: var(--glass-red); }
 
 /* MISSIONS LIST */
-.mission-card { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--txt-dim); }
+.mission-card { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--txt-dim); position: relative; }
 .mission-card.active-mission { border-left-color: var(--glass-cyan); }
 .mission-card.completed { border-left-color: var(--glass-green); opacity: 0.7; }
-.mission-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--txt-dim); margin-bottom: 6px; }
+.mission-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--txt-dim); margin-bottom: 6px; align-items: center; }
 .mission-obj-list { list-style: none; margin: 10px 0; font-size: 0.9rem; padding-left: 4px; }
 .mission-obj-list li { margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
 
@@ -71,7 +73,7 @@ input, select, textarea { width: 100%; background: var(--bg-input); border: 1px 
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--glass-cyan); }
 
 /* SYSTEM ACTIVE HUD (FLIGHT SCREEN) */
-#flight-deck-active { display: none; fixed: top 0 left 0; width: 100vw; height: 100vh; background: var(--bg-space); z-index: 9999; padding: 40px; justify-content: center; align-items: center; }
+#flight-deck-active { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-space); z-index: 9999; padding: 40px; justify-content: center; align-items: center; }
 .flight-hud-box { max-width: 650px; width: 100%; text-align: center; }
 .flight-timer { font-size: 6.5rem; font-weight: 800; font-family: monospace; color: #fff; text-shadow: 0 0 30px rgba(14,165,233,0.4); margin: 20px 0; letter-spacing: -2px; }
 .flight-atc { background: rgba(0,0,0,0.4); border: 1px solid var(--border-glow); padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; color: var(--glass-green); margin-bottom: 30px; }
@@ -166,6 +168,23 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
               <option value="">No Active Mission Planned</option>
             </select>
             <button class="btn-primary" onclick="engageFlightDeck()">✈️ Begin Flight Session</button>
+          </div>
+        </div>
+
+        <!-- MANUAL FLIGHT DATA ADJUSTMENT INJECTOR -->
+        <div class="panel">
+          <div class="panel-title">MANUAL METRIC LOGGER // FORCE ADD TIME</div>
+          <p style="font-size:0.8rem; color:var(--txt-dim); margin-bottom:12px;">Forgot to start your terminal session execution? Log it manually below:</p>
+          <div class="input-row" style="grid-template-columns: 1fr 1fr 1fr; align-items: end;">
+            <div>
+              <label style="font-size:0.75rem; color:var(--txt-dim); display:block; margin-bottom:4px;">Hours</label>
+              <input type="number" id="manual-hours" min="0" value="0" placeholder="0">
+            </div>
+            <div>
+              <label style="font-size:0.75rem; color:var(--txt-dim); display:block; margin-bottom:4px;">Minutes</label>
+              <input type="number" id="manual-minutes" min="0" max="59" value="0" placeholder="30">
+            </div>
+            <button class="btn-action" style="height: 40px; border-color: var(--glass-green); color: var(--glass-green);" onclick="injectManualFlightTime()">Inject Data</button>
           </div>
         </div>
 
@@ -377,6 +396,11 @@ let targetedMissionId = "";
 let audioNodes = {};
 let isAutopilotEngaged = false;
 
+// Global tracking references to fix background closure scope issues
+let currentDurationMins = 30;
+let currentSubjectStr = "General Vector";
+let currentObjectiveStr = "Manual Target Operational Objective Run";
+
 function commitEngineStorage() {
   localStorage.setItem('flightEngineState', JSON.stringify(sysState));
 }
@@ -385,7 +409,9 @@ function switchTab(tabId) {
   document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`view-${tabId}`).classList.add('active');
-  event.target.classList.add('active');
+  if(event && event.target) {
+    event.target.classList.add('active');
+  }
   compileLiveViews();
 }
 
@@ -406,6 +432,56 @@ function createNewMission() {
   commitEngineStorage();
   document.getElementById('form-m-obj').value = '';
   switchTab('dash');
+}
+
+// INJECT MANUAL FLIGHT TIME ENGINE
+function injectManualFlightTime() {
+  const hrInput = parseInt(document.getElementById('manual-hours').value) || 0;
+  const minInput = parseInt(document.getElementById('manual-minutes').value) || 0;
+  const totalMinsAdded = (hrInput * 60) + minInput;
+
+  if (totalMinsAdded <= 0) {
+    alert("Please enter a valid amount of hours or minutes to add.");
+    return;
+  }
+
+  sysState.xp += totalMinsAdded;
+  sysState.hours += totalMinsAdded;
+
+  // Append a unique system tracking entry to the historical flight logs matrix
+  const nextFlightNum = 100 + sysState.logs.length + 1;
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  sysState.logs.push({
+    flightNum: nextFlightNum,
+    date: dateStr,
+    duration: totalMinsAdded,
+    subject: 'Manual Update',
+    mission: 'Manually Overridden Operational Metrics Insertion',
+    notes: 'Time injected manually via dashboard override controls.',
+    weather: sysState.currentWeather
+  });
+
+  commitEngineStorage();
+  
+  // Reset inputs
+  document.getElementById('manual-hours').value = 0;
+  document.getElementById('manual-minutes').value = 0;
+  
+  alert(`Successfully added ${totalMinsAdded} minutes (${hrInput}h ${minInput}m) to total metrics!`);
+  compileLiveViews();
+}
+
+// HARD-DELETE MISSION HANDLER
+function deleteMission(missionId) {
+  if (confirm(`Are you sure you want to permanently clear Mission [${missionId}] from the ledger?`)) {
+    sysState.missions = sysState.missions.filter(m => m.id !== missionId);
+    if (targetedMissionId === missionId) {
+      targetedMissionId = "";
+      document.getElementById('active-mission-selector').value = "";
+    }
+    commitEngineStorage();
+    compileLiveViews();
+  }
 }
 
 function calculateCurrentRankAndProgress() {
@@ -460,15 +536,21 @@ function compileLiveViews() {
   if(sysState.currentWeather === 'Low Energy') document.getElementById('w-Low').classList.add('active');
   if(sysState.currentWeather === 'Burned Out') document.getElementById('w-Burned').classList.add('active');
 
-  // Build Mission List View
+  // Build Mission List View (With integrated Delete buttons)
   const mContainer = document.getElementById('missions-container-list');
   mContainer.innerHTML = sysState.missions.length ? "" : `<p style="color:var(--txt-dim); font-size:0.9rem;">No active missions filed.</p>`;
   sysState.missions.slice().reverse().forEach(m => {
     mContainer.innerHTML += `
       <div class="mission-card ${m.status === 'Completed' ? 'completed' : ''}">
-        <div class="mission-meta"><span>${m.id} // SUBJECT: ${m.subject}</span><span>${m.difficulty}</span></div>
-        <div style="font-weight:700; margin-bottom:6px;">${m.objective}</div>
-        <div class="mission-meta"><span>Allocated Velocity: ${m.time} mins</span><span>Status: <b style="color:var(--glass-amber);">${m.status}</b></span></div>
+        <div class="mission-meta">
+          <span>${m.id} // SUBJECT: ${m.subject}</span>
+          <button class="btn-delete" onclick="deleteMission('${m.id}')">❌ Delete</button>
+        </div>
+        <div style="font-weight:700; margin-bottom:6px; padding-right:60px;">${m.objective}</div>
+        <div class="mission-meta">
+          <span>Allocated Velocity: ${m.time} mins</span>
+          <span>Status: <b style="color:var(--glass-amber);">${m.status}</b></span>
+        </div>
       </div>`;
   });
 
@@ -605,14 +687,14 @@ function updateAudioButtonUI(type, isPlaying) {
 function engageFlightDeck() {
   let matchedMission = sysState.missions.find(m => m.id === targetedMissionId);
   
-  let subjectStr = matchedMission ? matchedMission.subject : "General Vector";
-  let objectiveStr = matchedMission ? matchedMission.objective : "Manual Target Operational Objective Run";
-  let durationMins = matchedMission ? matchedMission.time : 30;
+  currentSubjectStr = matchedMission ? matchedMission.subject : "General Vector";
+  currentObjectiveStr = matchedMission ? matchedMission.objective : "Manual Target Operational Objective Run";
+  currentDurationMins = matchedMission ? matchedMission.time : 30;
 
-  document.getElementById('active-hud-sub').textContent = `Target Routing: [${subjectStr}]`;
-  document.getElementById('active-hud-obj').textContent = objectiveStr;
+  document.getElementById('active-hud-sub').textContent = `Target Routing: [${currentSubjectStr}]`;
+  document.getElementById('active-hud-obj').textContent = currentObjectiveStr;
   
-  secondsRemaining = durationMins * 60;
+  secondsRemaining = currentDurationMins * 60;
   refreshClockDisplay();
   
   document.getElementById('flight-deck-active').style.display = 'flex';
@@ -623,12 +705,17 @@ function engageFlightDeck() {
   document.body.classList.remove('autopilot-active');
   document.getElementById('autopilot-toggle-btn').textContent = "AUTOPILOT";
   
+  // Clear any existing active interval pointer completely before rebuilding loop structure
+  if (activeTimer) {
+    clearInterval(activeTimer);
+  }
+
   activeTimer = setInterval(() => {
     if(isFlightRunning) {
       secondsRemaining--;
       refreshClockDisplay();
       if(secondsRemaining <= 0) {
-        completeFlightSessionRoute(durationMins, subjectStr, objectiveStr);
+        completeFlightSessionRoute(currentDurationMins, currentSubjectStr, currentObjectiveStr);
       }
     }
   }, 1000);
