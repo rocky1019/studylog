@@ -187,7 +187,17 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
             <button class="btn-action" style="height: 40px; border-color: var(--glass-green); color: var(--glass-green);" onclick="injectManualFlightTime()">Inject Data</button>
           </div>
         </div>
-
+        <div class="panel">
+  <div class="panel-title">MANUAL STREAK INJECTOR // ADJUST DAYS</div>
+  <p style="font-size:0.8rem; color:var(--txt-dim); margin-bottom:12px;">Manually bump or set your target daily tracking streak below:</p>
+  <div class="input-row" style="grid-template-columns: 2fr 1fr; align-items: end;">
+    <div>
+      <label style="font-size:0.75rem; color:var(--txt-dim); display:block; margin-bottom:4px;">Set Streak (Days)</label>
+      <input type="number" id="manual-streak-input" min="0" placeholder="e.g. 5">
+    </div>
+    <button class="btn-action" style="height: 40px; border-color: var(--glass-amber); color: var(--glass-amber);" onclick="injectManualStreak()">Update Streak</button>
+  </div>
+</div>
         <div class="panel">
           <div class="panel-title">PILOT CAREER EXPEDITION RANKS</div>
           <div style="display:flex; flex-wrap: wrap; gap:8px;">
@@ -791,6 +801,28 @@ function completeFlightSessionRoute(minutes, subject, objective) {
   compileLiveViews();
 }
 
+// INJECT MANUAL STREAK OVERRIDE VALUE
+function injectManualStreak() {
+  const streakInput = parseInt(document.getElementById('manual-streak-input').value);
+
+  if (isNaN(streakInput) || streakInput < 0) {
+    alert("Please enter a valid positive number for your streak.");
+    return;
+  }
+
+  // Update memory state
+  sysState.streak = streakInput;
+
+  // Persist update directly into local storage matrix
+  commitEngineStorage();
+  
+  // Clear the input form field
+  document.getElementById('manual-streak-input').value = '';
+  
+  alert(`Streak manually set to 🔥 ${streakInput} Days!`);
+  compileLiveViews();
+}
+  
 // RUN APPLICATION CORE
 compileLiveViews();
 </script>
