@@ -171,7 +171,6 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
           </div>
         </div>
 
-        <!-- MANUAL FLIGHT DATA ADJUSTMENT INJECTOR -->
         <div class="panel">
           <div class="panel-title">MANUAL METRIC LOGGER // FORCE ADD TIME</div>
           <p style="font-size:0.8rem; color:var(--txt-dim); margin-bottom:12px;">Forgot to start your terminal session execution? Log it manually below:</p>
@@ -187,7 +186,7 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
             <button class="btn-action" style="height: 40px; border-color: var(--glass-green); color: var(--glass-green);" onclick="injectManualFlightTime()">Inject Data</button>
           </div>
         </div>
-        <div class="panel">
+<div class="panel">
   <div class="panel-title">MANUAL STREAK INJECTOR // ADJUST DAYS</div>
   <p style="font-size:0.8rem; color:var(--txt-dim); margin-bottom:12px;">Manually bump or set your target daily tracking streak below:</p>
   <div class="input-row" style="grid-template-columns: 2fr 1fr; align-items: end;">
@@ -198,7 +197,6 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
     <button class="btn-action" style="height: 40px; border-color: var(--glass-amber); color: var(--glass-amber);" onclick="injectManualStreak()">Update Streak</button>
   </div>
 </div>
-        
         <div class="panel">
           <div class="panel-title">PILOT CAREER EXPEDITION RANKS</div>
           <div style="display:flex; flex-wrap: wrap; gap:8px;">
@@ -277,12 +275,14 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
               <option value="30" selected>30 Minutes</option>
               <option value="45">45 Minutes</option>
               <option value="60">60 Minutes</option>
+              <option value="90">90 Minutes</option>
+              <option value="120">120 Minutes</option>
             </select>
           </div>
         </div>
         <div style="margin-bottom:12px;">
-          <label style="font-size:0.75rem; color:var(--txt-dim);">Core Objective Target</label>
-          <input id="form-m-obj" placeholder="e.g. Complete Truth Tables Exercise A">
+          <label style="font-size:0.75rem; color:var(--txt-dim);">Core Objective Target / Session Details</label>
+          <input id="form-m-obj" placeholder="e.g. Completed Truth Tables Exercise A">
         </div>
         <div style="margin-bottom:16px;">
           <label style="font-size:0.75rem; color:var(--txt-dim);">Difficulty Parameter</label>
@@ -292,7 +292,10 @@ body.autopilot-active .audio-grid, body.autopilot-active .flight-deck-links { di
             <option value="⭐⭐⭐" selected>⭐⭐⭐ Critical Flight</option>
           </select>
         </div>
-        <button class="btn-action" style="width:100%;" onclick="createNewMission()">Authorize Mission Architecture</button>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button class="btn-action" style="width:100%; border-color: var(--glass-cyan); color: var(--glass-cyan);" onclick="createNewMission('live')">📋 Authorize Mission Architecture (Use Live Timer)</button>
+          <button class="btn-action" style="width:100%; border-color: var(--glass-green); color: var(--glass-green);" onclick="createNewMission('retro')">⚡ Retroactive Log (Skip Timer & Complete Now)</button>
+        </div>
       </div>
     </div>
   </div>
@@ -399,9 +402,11 @@ const achievementsConfig = [
   { id: 'weather_proof', title: 'Rain Master', icon: '🌧️', desc: 'Complete a low-energy session' }
 ];
 
-// TIMING MATRIX CORE
+// TIMING MATRIX CORE (BACKGROUND DROPOUT RESISTANT)
 let activeTimer = null;
-let secondsRemaining = 0;
+let totalDurationSeconds = 0;
+let accumulatedTimeUsed = 0;
+let lastTickTimestamp = 0;
 let isFlightRunning = false;
 let targetedMissionId = "";
 let audioNodes = {};
@@ -432,15 +437,44 @@ function setWeather(status) {
   compileLiveViews();
 }
 
-function createNewMission() {
+// COCKPIT PIPELINE INJECTOR: LIVE MANIFEST ROUTING VS INSTANT RETROACTIVE LOGGING
+function createNewMission(mode) {
   const sub = document.getElementById('form-m-subject').value;
   const time = parseInt(document.getElementById('form-m-time').value);
   const obj = document.getElementById('form-m-obj').value || 'General Tactical Review';
   const diff = document.getElementById('form-m-diff').value;
   const newId = `M-${Math.floor(100 + Math.random() * 900)}`;
   
-  sysState.missions.push({ id: newId, subject: sub, objective: obj, time: time, difficulty: diff, status: 'In Progress' });
-  commitEngineStorage();
+  if (mode === 'retro') {
+    // 1. Log directly into the missions ledger as fully complete
+    sysState.missions.push({ id: newId, subject: sub, objective: obj, time: time, difficulty: diff, status: 'Completed' });
+    
+    // 2. Accumulate XP and logged aviation flight hours instantly
+    sysState.xp += time;
+    sysState.hours += time;
+    
+    // 3. Mount complete parameter history tracking straight into Logbook Database records
+    const nextFlightNum = 100 + sysState.logs.length + 1;
+    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    sysState.logs.push({
+      flightNum: nextFlightNum,
+      date: dateStr,
+      duration: time,
+      subject: sub,
+      mission: obj,
+      notes: 'Retroactive Manual Flight Log Entry confirmed post-session.',
+      weather: sysState.currentWeather
+    });
+    
+    commitEngineStorage();
+    alert(`Blackbox Entry Logged! Flight Session #${nextFlightNum} completely written retroactively. Added +${time} XP.`);
+  } else {
+    // Standard system architecture tracking path -> plans file inside dropdown selector
+    sysState.missions.push({ id: newId, subject: sub, objective: obj, time: time, difficulty: diff, status: 'In Progress' });
+    commitEngineStorage();
+    alert(`Mission ${newId} authorized and pushed into current pre-flight routing planner selection.`);
+  }
+  
   document.getElementById('form-m-obj').value = '';
   switchTab('dash');
 }
@@ -694,7 +728,7 @@ function updateAudioButtonUI(type, isPlaying) {
   if(btnActive) btnActive.textContent = sym;
 }
 
-// IN-FLIGHT DISPATCH TIMER LOOPS
+// IN-FLIGHT DISPATCH TIMER LOOPS (THROTTLE-RESISTANT TIME DIFFERENTIAL CALCS)
 function engageFlightDeck() {
   let matchedMission = sysState.missions.find(m => m.id === targetedMissionId);
   
@@ -705,34 +739,44 @@ function engageFlightDeck() {
   document.getElementById('active-hud-sub').textContent = `Target Routing: [${currentSubjectStr}]`;
   document.getElementById('active-hud-obj').textContent = currentObjectiveStr;
   
-  secondsRemaining = currentDurationMins * 60;
+  totalDurationSeconds = currentDurationMins * 60;
+  accumulatedTimeUsed = 0;
+  lastTickTimestamp = Date.now();
+  
   refreshClockDisplay();
   
   document.getElementById('flight-deck-active').style.display = 'flex';
-  document.getElementById('atc-dispatch-feed').textContent = "ATC: Cleared for flight routing departure climb profile. Maintain altitude.";
+  document.getElementById('atc-dispatch-feed').textContent = "ATC: Cleared for flight routing departure climb profile. Background track armed.";
   
   isFlightRunning = true;
   isAutopilotEngaged = false;
   document.body.classList.remove('autopilot-active');
   document.getElementById('autopilot-toggle-btn').textContent = "AUTOPILOT";
   
-  // Clear any existing active interval pointer completely before rebuilding loop structure
   if (activeTimer) {
     clearInterval(activeTimer);
   }
 
+  // 250ms high-speed updates verify that tab suspension wakes up completely synchronized with system time
   activeTimer = setInterval(() => {
     if(isFlightRunning) {
-      secondsRemaining--;
-      refreshClockDisplay();
-      if(secondsRemaining <= 0) {
+      const now = Date.now();
+      const deltaSeconds = (now - lastTickTimestamp) / 1000;
+      lastTickTimestamp = now;
+      
+      accumulatedTimeUsed += deltaSeconds;
+      
+      if(accumulatedTimeUsed >= totalDurationSeconds) {
         completeFlightSessionRoute(currentDurationMins, currentSubjectStr, currentObjectiveStr);
+      } else {
+        refreshClockDisplay();
       }
     }
-  }, 1000);
+  }, 250);
 }
 
 function refreshClockDisplay() {
+  const secondsRemaining = Math.max(0, Math.ceil(totalDurationSeconds - accumulatedTimeUsed));
   let h = Math.floor(secondsRemaining / 3600);
   let m = Math.floor((secondsRemaining % 3600) / 60);
   let s = secondsRemaining % 60;
@@ -742,6 +786,9 @@ function refreshClockDisplay() {
 
 function triggerPauseResumeActiveFlight() {
   isFlightRunning = !isFlightRunning;
+  if(isFlightRunning) {
+    lastTickTimestamp = Date.now(); // Reset time tracking reference point on resume
+  }
   document.getElementById('active-pause-btn').textContent = isFlightRunning ? "HOLD MOTION" : "RESUME CLIMB";
   document.getElementById('atc-dispatch-feed').textContent = isFlightRunning ? "ATC: Continuing flight climb layout standard." : "ATC: Holding patterns executed. Deviating focus parameters.";
 }
@@ -753,6 +800,7 @@ function triggerEmergencyAutopilot() {
     document.getElementById('autopilot-toggle-btn').textContent = "MANUAL DECK";
     document.getElementById('atc-dispatch-feed').textContent = "ATC: Autopilot Engaged. Visual distractions shuttered.";
     isFlightRunning = true;
+    lastTickTimestamp = Date.now();
     document.getElementById('active-pause-btn').textContent = "HOLD MOTION";
   } else {
     document.body.classList.remove('autopilot-active');
@@ -823,7 +871,6 @@ function injectManualStreak() {
   alert(`Streak manually set to 🔥 ${streakInput} Days!`);
   compileLiveViews();
 }
-  
 // RUN APPLICATION CORE
 compileLiveViews();
 </script>
